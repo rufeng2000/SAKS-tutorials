@@ -111,7 +111,7 @@ class DigitalDisplayTM1637(object):
         self.__ic_tm1637.set_command(0x44)
 
         for i in range(min(4, len(self.__numbers))):
-            dp = True if self.__numbers[i].count('.') > 0 else False
+            dp = 0x80 if self.__numbers[i].count('.') > 0 else 0x00
             num = self.__numbers[i].replace('.','')
             if num == '#':
                 num = 10
@@ -119,10 +119,6 @@ class DigitalDisplayTM1637(object):
                 num = 11
             else:
                 num = int(num)
-
-            if dp:
-                self.__ic_tm1637.set_data(self.__address_code[i], self.__number_code[num]|0x80)
-            else:
-                self.__ic_tm1637.set_data(self.__address_code[i], self.__number_code[num])
+            self.__ic_tm1637.set_data(self.__address_code[i], self.__number_code[num] | dp)
 
         self.on()

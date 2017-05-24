@@ -46,8 +46,6 @@ class DigitalDisplay(object):
         self.__pattern = re.compile(r'[#| |\d]\.?')
         self.__pins = pins
         self.__real_true = real_true
-        self.__pin_stat = { pin : True for pin in self.__pins['sel'] + self.__pins['seg'] }
-        self.off()
         try:
             t1 = Thread(target = self.flush_4bit)
             t1.setDaemon(True)
@@ -85,47 +83,43 @@ class DigitalDisplay(object):
         self.__numbers = str
 
     def set_pin(self, pin, v):
-        '''
-        Fixed by wyb, for better display.
-        '''
         if v != self.__pin_stat[pin]:
             self.__pin_stat[pin] = v
             GPIO.output(pin, not self.__real_true if v else self.__real_true)
     
     def flush_bit(self, sel, num, dp):
+        sel_pin = self.__pins['sel'][sel]
         try:
-            n = self.__number_code[int(num)]
+            n = self.__number_code[int(num)] | (0x80 if dp else 0x00)
+            j = True
+            for i in range(8):
+                pin = self.__pins['seg'][i]
+                v = ((n & (1 << i)) != 0)
+                if v != self.__pin_stat[pin]:
+                    if j:
+                        for k in self.__pins['sel']:
+                            if k != sel_pin:
+                                self.set_pin(k, False)
+                        j = False
+                    self.set_pin(pin, v)
+            self.set_pin(sel_pin, True)
         except:
-            self.set_pin(self.__pins['sel'][sel], False)
-            return
-
-        if dp:
-            n |= 0x80
-
-        j = 4
-        for i in range(8):
-            pin = self.__pins['seg'][i]
-            v = ((n & (1 << i)) != 0)
-            if v != self.__pin_stat[pin]:
-                for k in range(j):
-                    if k != sel:
-                        self.set_pin(self.__pins['sel'][k], False)
-                j = 0
-                self.set_pin(pin, v)
-
-        self.set_pin(self.__pins['sel'][sel], True)
+            self.set_pin(sel_pin, False)
 
     def flush_4bit(self):
-        number = ''
+        numbers = ''
         digits = []
+        for pin in self.__pins['sel'] + self.__pins['seg']:
+            self.__pin_stat[pin] = True
+            self.set_pin(pin, False)
         while True:
-            if self.__is_flushing:
-                if number != self.__number:
-                    number = self.__number
-                    matches = self.__pattern.findall(number)
-                    digits = []
-                    for i in range(len(matches)):
-                        digits.append((matches[i].replace('.',''), matches[i].count('.') > 0))
+            if numbers != self.__numbers:
+                numbers = self.__numbers
+                matches = self.__pattern.findall(numbers)
+                digits = []
+                for i in range(len(matches)):
+                    digits.append((matches[i].replace('.',''), matches[i].count('.') > 0))
+            if self.__is_flushing and digits:
                 for i in range(min(4, len(digits))):
                     self.flush_bit(i, *digits[i])
                     time.sleep(0.005)

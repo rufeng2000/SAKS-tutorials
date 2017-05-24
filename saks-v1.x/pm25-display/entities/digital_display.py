@@ -31,8 +31,7 @@ class DigitalDisplay(object):
     '''
     __pins = {'seg':[], 'sel':[]}
     __real_true = GPIO.HIGH
-    __numbers = []
-    __numbers_detail = []
+    __numbers = ''
     __is_flushing = False
     __number_code = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x00]
     __pin_stat = {}
@@ -44,6 +43,7 @@ class DigitalDisplay(object):
         :param real_true: GPIO.HIGH or GPIO.LOW
         :return: void
         '''
+        self.__pattern = re.compile(r'[#| |\d]\.?')
         self.__pins = pins
         self.__real_true = real_true
         self.__pin_stat = { pin : True for pin in self.__pins['sel'] + self.__pins['seg'] }
@@ -55,7 +55,6 @@ class DigitalDisplay(object):
         except:
             print "Error: Unable to start thread by DigitalDisplay"
 
-    #Stauts.
     @property
     def numbers(self):
         '''
@@ -64,26 +63,6 @@ class DigitalDisplay(object):
         '''
         return self.__numbers
 
-    #@numbers.setter
-    def set_numbers(self, value):
-        '''
-        Set the numbers array to show
-        :return: void
-        '''
-        pattern = re.compile(r'[#|\d]\.?')
-        matches = pattern.findall(value)
-        #del self.__numbers
-        self.__numbers = []
-        for i in range(len(matches)):
-            self.__numbers.append(matches[i])
-            self.__numbers_detail.append((matches[i].replace('.',''), matches[i].count('.') > 0))
-        #print(self.__numbers)
-
-    #@numbers.deleter
-    #def numbers(self):
-    #    del self.__numbers
-
-    #Verbs.
     def on(self):
         '''
         Set display on
@@ -97,18 +76,13 @@ class DigitalDisplay(object):
         :return: void
         '''
         self.__is_flushing = False
-        for pin in self.__pins['sel'] + self.__pins['seg']:
-            self.set_pin(pin, False)
 
     def show(self, str):
         '''
         Set the numbers array to show and enable the display
         :return: void
         '''
-        self.__is_flushing = False
-        self.set_numbers(str)
-        self.__is_flushing = True
-        #print(self.__numbers)
+        self.__numbers = str
 
     def set_pin(self, pin, v):
         '''
@@ -119,11 +93,12 @@ class DigitalDisplay(object):
             GPIO.output(pin, not self.__real_true if v else self.__real_true)
     
     def flush_bit(self, sel, num, dp):
-        if num == '#' or num == '':
+        try:
+            n = self.__number_code[int(num)]
+        except:
             self.set_pin(self.__pins['sel'][sel], False)
             return
-        
-        n = self.__number_code[int(num)]
+
         if dp:
             n |= 0x80
 
@@ -141,15 +116,20 @@ class DigitalDisplay(object):
         self.set_pin(self.__pins['sel'][sel], True)
 
     def flush_4bit(self):
+        number = ''
+        digits = []
         while True:
             if self.__is_flushing:
-                #print(self.__numbers)
-                #print(range(min(4, len(self.__numbers))))
-                try:
-                    for i in range(min(4, len(self.__numbers))):
-                        self.flush_bit(i, *self.__numbers_detail[i])
-                        time.sleep(0.005)
-                except:
-                    pass
+                if number != self.__number:
+                    number = self.__number
+                    matches = self.__pattern.findall(number)
+                    digits = []
+                    for i in range(len(matches)):
+                        digits.append((matches[i].replace('.',''), matches[i].count('.') > 0))
+                for i in range(min(4, len(digits))):
+                    self.flush_bit(i, *digits[i])
+                    time.sleep(0.005)
             else:
-                time.sleep(0.005)
+                for pin in self.__pins['sel']:
+                    self.set_pin(pin, False)
+                time.sleep(0.02)

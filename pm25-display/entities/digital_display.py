@@ -31,10 +31,12 @@ class DigitalDisplay(object):
     '''
     __pins = {'seg':[], 'sel':[]}
     __real_true = GPIO.HIGH
-    __numbers = ''
-    __is_flushing = False
-    __number_code = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x00]
+    __number_code = {'0':0x3f, '1':0x06, '2':0x5b, '3':0x4f, '4':0x66, '5':0x6d, '6':0x7d, 
+                     '7':0x07, '8':0x7f, '9':0x6f, '-':0x40, '_':0x08, '=':0x48,
+                     'A':0x77, 'B':0x7c, 'C':0x39, 'D':0x5e, 'E':0x79, 'F':0x71}
     __pin_stat = {}
+    __numbers = ''
+    __show = ''
 
     def __init__(self, pins, real_true = GPIO.HIGH):
         '''
@@ -43,7 +45,7 @@ class DigitalDisplay(object):
         :param real_true: GPIO.HIGH or GPIO.LOW
         :return: void
         '''
-        self.__pattern = re.compile(r'[#| |\d]\.?')
+        self.__pattern = re.compile(r'[-_=A-F0-9 #]\.?')
         self.__pins = pins
         self.__real_true = real_true
         try:
@@ -66,22 +68,21 @@ class DigitalDisplay(object):
         Set display on
         :return: void
         '''
-        self.__is_flushing = True
+        self.__numbers = self.__show
 
     def off(self):
         '''
         Set display off
         :return: void
         '''
-        self.__is_flushing = False
+        self.__numbers = ''
 
     def show(self, str):
         '''
         Set the numbers array to show and enable the display
         :return: void
         '''
-        self.__numbers = str
-        self.__is_flushing = True
+        self.__numbers = self.__show = str
 
     def set_pin(self, pin, v):
         if v != self.__pin_stat[pin]:
@@ -90,22 +91,22 @@ class DigitalDisplay(object):
 
     def flush_bit(self, sel, num, dp):
         sel_pin = self.__pins['sel'][sel]
-        try:
-            n = self.__number_code[int(num)] | (0x80 if dp else 0x00)
-            j = True
-            for i in range(8):
-                pin = self.__pins['seg'][i]
-                v = ((n & (1 << i)) != 0)
-                if v != self.__pin_stat[pin]:
-                    if j:
-                        for k in self.__pins['sel']:
-                            if k != sel_pin:
-                                self.set_pin(k, False)
-                        j = False
-                    self.set_pin(pin, v)
-            self.set_pin(sel_pin, True)
-        except:
+        if not num in self.__number_code:
             self.set_pin(sel_pin, False)
+            return
+        n = self.__number_code[num] | (0x80 if dp else 0x00)
+        j = True
+        for i in range(8):
+            pin = self.__pins['seg'][i]
+            v = ((n & (1 << i)) != 0)
+            if v != self.__pin_stat[pin]:
+                if j:
+                    for k in self.__pins['sel']:
+                        if k != sel_pin:
+                            self.set_pin(k, False)
+                    j = False
+                self.set_pin(pin, v)
+        self.set_pin(sel_pin, True)
 
     def flush_4bit(self):
         numbers = ''
@@ -120,7 +121,7 @@ class DigitalDisplay(object):
                 digits = []
                 for i in range(len(matches)):
                     digits.append((matches[i].replace('.',''), matches[i].count('.') > 0))
-            if self.__is_flushing and digits:
+            if digits:
                 for i in range(min(4, len(digits))):
                     self.flush_bit(i, *digits[i])
                     time.sleep(0.005)
